@@ -1,4 +1,12 @@
 client = require('../redis-store')
+templates = require('../templates')
+
+##
+# Set up your free mailgun account here: TODO
+# Setup Mailgun
+Mailgun = require('mailgun').Mailgun
+mailgun = new Mailgun(process.env.HUBOT_MAILGUN_APIKEY)
+from = process.env.HUBOT_SCRUM_MAILGUN_EMAIL || 'scrumbot@example.com'
 
 class Player
 
@@ -10,12 +18,10 @@ class Player
       user = users[0]
     return new Player(user)
 
-  ##
-  # Class functions
   @.fromMessage = (msg) ->
     return new Player(msg.envelope.user)
 
-   @.dm = (robot, name, message) ->
+  @.dm = (robot, name, message) ->
     users = robot.brain.usersForFuzzyName(name)
     if users.length is 1
       user = users[0]
@@ -24,12 +30,12 @@ class Player
   ##
   # Constructor
   constructor: (user) ->
+    @real_name = user.real_name
     @name = user.name
     @email = user.email_address
     @score = 0
 
   # Adds the player's entry to the category
-  #
   entry: (category, message) ->
     @.givePoints(@email, category)
     key = @email + ":" + category
@@ -42,11 +48,6 @@ class Player
     unless client().exists(key) is 0 and ["today", "yesterday"].indexOf(category)
       client().zadd("scrum", unit, @email)
       @score += unit
-
-  ##
-  # Instance functions
-  prompt: (message) ->
-    console.log message
 
   getScore: ->
     updateScore()
@@ -77,14 +78,35 @@ class Player
   blockers: (message) ->
     scrum.entry(@name, "blockers", message)
 
+  ##
+  # Mail everyone on the team the same subject and body
   mail: (subject, body) ->
-    mailgun.sendText "noreply+scrumbot@example.com", [
-      ["#{@name} <#{@email}>"]
-    ], subject, body, "noreply+scrumbot@example.com", {}, (err) ->
-      if err
-        console.log "[mailgun] Oh noes: " + err
-      else
-        console.log "[mailgun] Success!"
+    if mailgun._apiKey
+      to = "#{@real_name} <#{@email}>"
+      mailgun.sendRaw from, [to]
+        , "From: #{from}" +
+          "\nTo: " + to +
+          "\nContent-Type: text/html; charset=utf-8" +
+          "\nSubject: #{subject}" +
+          "\n\n#{body}"
+      , (err) ->
+        if err
+          console.error "[mailgun] Oh noes: " + err
+        else
+          console.log "[mailgun] Email sent to: #{to}"
+      return
+    else
+      console.warn('[mailgun] api_key not found, set the env var HUBOT_MAILGUN_APIKEY')
       return
 
+  ##
+  # Mail everyone on the team the the team summary email
+  mailSummary: (team) ->
+    subject = templates().mailPlayerSummarySubject(@)
+    body = templates().mailPlayerSummaryBody(team)
+    @.mail(subject, body)
+
+  mailSeasonEnd: ->
+
 module.exports = Player
+

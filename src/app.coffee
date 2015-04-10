@@ -40,17 +40,19 @@ MESSAGE = """
 """
 
 ##
-# Set to local timezone
-TIMEZONE = process.env.TZ
+# Default time to tell users to do their scrum
+PROMPT_AT = process.env.HUBOT_SCRUM_PROMPT_AT || '0 0 6 * * *' # 6am everyday
 
 ##
 # Default scrum reminder time
-REMIND_AT = process.env.HUBOT_SCRUM_REMIND_AT || '0 0 6 * * *' # 6am everyday
+REMIND_AT = process.env.HUBOT_SCRUM_REMIND_AT || '0 30 11 * * *' # 11am everyday
 
 ##
 # SEND the scrum at 10 am everyday
-NOTIFY_AT = process.env.HUBOT_SCRUM_NOTIFY_AT || '0 0 10 * * *' # 10am
+SUMMARY_AT = process.env.HUBOT_SCRUM_SUMMARY_AT || '0 0 12 * * *' # noon
 
+##
+# These are the keys that are required each day to earn points
 REQUIRED_CATEGORIES = ["today", "yesterday"]
 
 ##
@@ -58,15 +60,8 @@ REQUIRED_CATEGORIES = ["today", "yesterday"]
 CronJob = require("cron").CronJob
 
 ##
-# Set up your free mailgun account here: TODO
-# Setup Mailgun
-Mailgun = require('mailgun').Mailgun
-mailgun = new Mailgun(process.env.HUBOT_MAILGUN_APIKEY)
-FROM_USER = process.env.HUBOT_SCRUM_FROM_USER || "noreply+scrumbot@example.com"
-
-##
-# Setup Handlebars
-Handlebars = require('handlebars')
+# Set to local timezone
+TIMEZONE = process.env.TZ
 
 # Models
 # Team = require('./models/team')
@@ -81,6 +76,8 @@ module.exports = (robot) ->
   # Initialize the scrum
   scrum = new Scrum(robot)
 
+  ##
+  # Response section
   robot.respond /today (.*)/i, (msg) ->
     player = Player.fromMessage(msg)
     player.entry("today", msg.match[1])
@@ -89,79 +86,76 @@ module.exports = (robot) ->
     player = Player.fromMessage(msg)
     msg.reply "Your name is: #{player.name}"
 
-  ##
-  # Response section
   robot.respond /scrum players/i, (msg) ->
     console.log scrum.players()
     list = scrum.players().map (player) -> "#{player.name}: #{player.score}"
     msg.reply list.join("\n") || "Nobody is in the scrum!"
 
-  robot.respond /scrum prompt @?([\w .\-]+)\?*$/i, (msg) ->
-    name = msg.match[1].trim()
-    msg.reply msg.user
-    player = scrum.player(name)
-    scrum.prompt(player, "yay")
+  ##
+  # Testing mailers
+  robot.respond /scrum mail player/, (msg) ->
+    player = Player.fromMessage(msg)
+    player.mailSummary(scrum.team())
+
+  robot.respond /scrum mail team/, (msg) ->
+    scrum.team().mailSummary()
 
   ##
-  # Define the schedule
+  # Testing mailers
+  robot.respond /scrum dm player/, (msg) ->
+    player = Player.fromMessage(msg)
+    Player.dm(robot, player.name, "dm test to just #{player.real_name}")
+
+  robot.respond /scrum dm team/, (msg) ->
+    scrum.team().dm("dm test to team")
+
+  ##
+  # Test messages
+  robot.respond /scrum prompt/, (msg) ->
+    scrum.prompt()
+
+  ##
+  # Test messages
+  robot.respond /scrum reminder/, (msg) ->
+    scrum.reminder()
+
+  ##
+  # Test messages
+  robot.respond /scrum summary/, (msg) ->
+    scrum.summary()
+
+  ##
+  # Setup things that need scheduling
   schedule =
-    reminder: (time) ->
+    prompt: (time) ->
       new CronJob(time, ->
-        scrum.remind()
+        scrum.prompt()
         return
       , null, true, TIMEZONE)
 
-    notify: (time) ->
+    reminder: (time) ->
       new CronJob(time, ->
-        robot.brain.data.scrum = {}
+        scrum.reminder()
+        return
+      , null, true, TIMEZONE)
+
+    summary: (time) ->
+      new CronJob(time, ->
+        scrum.summary()
         return
       , null, true, TIMEZONE)
 
   # Schedule the Reminder with a direct message so they don't forget
   # Don't send this if they already sent it in
   # instead then send good job and leaderboard changes + streak info
-  schedule.reminder REMIND_AT
+  schedule.prompt '0 0 16 * * *' # PROMPT_AT
 
   ##
-  # Schedule when the order should be cleared at
-  schedule.notify NOTIFY_AT
+  # Schedule reminder to let the user know they only have a little time
+  # left to complete their scrum
+  schedule.reminder '0 5 16 * * *' # PREMIND_AT
+
   ##
-  # Messages presented to the channel, via DM, or email
-  status =
-    personal: (user) ->
-      source = """
-        =------------------------------------------=
-        hey {{user}}, You have {{score}} points.
-        =------------------------------------------=
-      """
-      template = Handlebars.compile(source)
-      template({ user: user.name, score: user.score })
-
-    leaderboard: (users) ->
-      source = """
-        =------------------------------------------=
-        Hey team, here is the leaderboard:
-        {{#each users}}
-          {{name}}: {{score}}
-        {{/each}}
-        =------------------------------------------=
-      """
-      template = Handlebars.compile(source)
-      template({ users: users })
-
-    summary: (users)->
-      source = """
-        =------------------------------------------=
-        Scrum Summary for {{ day }}:
-        {{#each users}}
-          {{name}}
-          today: {{today}}
-          yesterday: {{yesterday}}
-          blockers: {{blockers}}
-        {{/each}}
-        =------------------------------------------=
-      """
-      template = Handlebars.compile(source)
-      # Users will be users:[{name:"", today:"", yesterday:"", blockers:""}]
-      template({users: users, date: scrum.today()})
+  # This will deliver the email and reset.
+  schedule.summary '0 10 16 * * *' # PSUMMARY_AT
 

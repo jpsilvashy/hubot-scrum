@@ -20,12 +20,16 @@ class Scrum
   player: (name) ->
     Player.find(@robot, name)
 
-  prompt: (player, message) ->
-    Player.dm(@robot, player.name, message)
+  prompt: ->
+    @.team().messagePrompt()
 
-  demo: ->
+  reminder: ->
+    @.team().messageReminder()
+
+  summary: ->
+    @.team().mailSummary()
+    @.team().postSummary()
     
-
   # FIXME: This should take a player object
   # and return the total points they have
   # there are a few ways to do this:
@@ -36,8 +40,6 @@ class Scrum
   #   - we scan back and total up all their points ever, grouping
   #     the consecutive ones and applying the appropriate bonus points
   #     for those instances
-
-
 
   # takes a player and a callback
   # the callback is going to receive the score for the player
@@ -70,6 +72,5 @@ class Scrum
   date: ->
     new Date().toJSON().slice(0,10)
 
-
-
 module.exports = Scrum
+

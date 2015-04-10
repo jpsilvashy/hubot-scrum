@@ -22,9 +22,12 @@ Include package in Hubot's `external-scripts.json`:
 
 ## Configuration
 
-    HUBOT_SCRUM_CLEAR_AT  # When to clear the current scrum, use cron style syntax (defaults to: 0 0 0 * * *)
-    HUBOT_SCRUM_NOTIFY_AT # When to notify the HUBOT_SCRUM_ROOM to start the scrum, use cron style syntax (defaults to: 0 0 10 * * 4)
-    HUBOT_SCRUM_ROOM      # xxxxx_room_name@conf.hipchat.com
+Scrumbot has some default settings, if you want to recieve emails you need to provide a Mailgun api key and a few other details. These are optional to use scrumbot, but greatly improve the experience!
+    
+    HUBOT_SCRUM_MAILGUN_APIKEY=key-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    HUBOT_SCRUM_MAILGUN_EMAIL=scrumbot@example.com
+
+If you don't have a mailgun api key, [get one here](https://mailgun.com/signup).
 
 ## Commands
 
